@@ -7,10 +7,11 @@ import { AuthModal } from '@/components/AuthModal'
 import { useAuth } from '@/contexts/AuthContext'
 import { BookOpen, Keyboard, Trophy, Users } from 'lucide-react'
 import Link from 'next/link'
+import { supabase } from '@/lib/supabase'
 
 export default function HomePage() {
   const [showAuthModal, setShowAuthModal] = useState(false)
-  const { user } = useAuth()
+  const { user, signOut } = useAuth()
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -30,6 +31,16 @@ export default function HomePage() {
                 <Link href="/library">
                   <Button>Go to Library</Button>
                 </Link>
+                <Button 
+                  variant="outline"
+                  onClick={async () => {
+                    const { signOut } = await import('@/contexts/AuthContext')
+                    await supabase.auth.signOut()
+                    window.location.href = '/'
+                  }}
+                >
+                  Sign Out
+                </Button>
               </div>
             ) : (
               <Button onClick={() => setShowAuthModal(true)}>

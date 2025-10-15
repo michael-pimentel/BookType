@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
 import { AddBookModal } from '@/contexts/AddBookModal'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
@@ -236,7 +235,15 @@ export default function LibraryPage() {
                           <span className="text-gray-600">Progress</span>
                           <span className="font-medium">{Math.round(progress)}%</span>
                         </div>
-                        <Progress value={progress} className="h-2" />
+                        <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full transition-all duration-300 ease-out"
+                            style={{
+                              width: `${progress}%`,
+                              backgroundColor: `hsl(${progress * 1.2}, 80%, 50%)`
+                            }}
+                          />
+                        </div>
                       </div>
 
                       <div className="flex items-center justify-between">

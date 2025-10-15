@@ -28,6 +28,7 @@ export default function TypingPage() {
   const [book, setBook] = useState<Book | null>(null)
   const [userInput, setUserInput] = useState('')
   const [currentProgress, setCurrentProgress] = useState<ProgressType | null>(null)
+  const [keystrokes, setKeystrokes] = useState<{ timestamp: number }[]>([])
   const [stats, setStats] = useState<TypingStats>({
     wpm: 0,
     accuracy: 100,
@@ -40,7 +41,6 @@ export default function TypingPage() {
   const [isCompleted, setIsCompleted] = useState(false)
   
   const { user } = useAuth()
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
@@ -49,16 +49,12 @@ export default function TypingPage() {
     }
   }, [user, bookId])
 
+  // Calculate stats immediately when userInput or keystrokes change
   useEffect(() => {
-    if (stats.startTime && !isCompleted) {
-      intervalRef.current = setInterval(calculateStats, 1000)
-      return () => {
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current)
-        }
-      }
+    if (userInput.length > 0) {
+      calculateStats()
     }
-  }, [stats.startTime, isCompleted])
+  }, [userInput, keystrokes])
 
   const fetchBookAndProgress = async () => {
     try {
@@ -99,11 +95,30 @@ export default function TypingPage() {
   }
 
   const calculateStats = () => {
-    if (!book || !stats.startTime) return
+    if (!book || keystrokes.length < 5) {
+      // Don't show stats until at least 5 keystrokes
+      setStats(prev => ({
+        ...prev,
+        wpm: 0,
+        accuracy: 100,
+        charsTyped: userInput.length,
+        errors: 0
+      }))
+      return
+    }
 
-    const timeElapsed = (Date.now() - stats.startTime) / 1000 / 60 // minutes
-    const wordsTyped = userInput.trim().split(/\s+/).length
-    const wpm = timeElapsed > 0 ? Math.round(wordsTyped / timeElapsed) : 0
+    // Calculate WPM based on last 10 seconds of typing
+    const now = Date.now()
+    const recentKeystrokes = keystrokes.filter(k => now - k.timestamp < 10000)
+    
+    if (recentKeystrokes.length < 5) {
+      setStats(prev => ({ ...prev, wpm: 0 }))
+      return
+    }
+
+    const timeSpan = (now - recentKeystrokes[0].timestamp) / 1000 / 60 // minutes
+    const wordsTyped = recentKeystrokes.length / 5 // average 5 chars per word
+    const wpm = timeSpan > 0 ? Math.round(wordsTyped / timeSpan) : 0
 
     // Calculate accuracy
     const correctChars = userInput.split('').reduce((count, char, index) => {
@@ -131,6 +146,11 @@ export default function TypingPage() {
     // Don't allow typing beyond the book content
     if (newInput.length > book!.content.length) {
       return
+    }
+
+    // Track keystroke for WPM calculation
+    if (newInput.length > userInput.length) {
+      setKeystrokes(prev => [...prev, { timestamp: Date.now() }])
     }
 
     setUserInput(newInput)
@@ -174,18 +194,21 @@ export default function TypingPage() {
         if (error) throw error
       } else {
         // Create new progress
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('progress')
           .insert(progressData)
+          .select()
+          .single()
 
         if (error) throw error
+        if (data) setCurrentProgress(data)
       }
 
-      setCurrentProgress(prev => ({
-        ...prev!,
+      setCurrentProgress(prev => prev ? {
+        ...prev,
         chars_typed: charsTyped,
         completed: completed
-      }))
+      } : null)
     } catch (error) {
       console.error('Error saving progress:', error)
     } finally {
@@ -198,39 +221,74 @@ export default function TypingPage() {
     return Math.min((userInput.length / book.content.length) * 100, 100)
   }
 
-  const getTextToDisplay = () => {
-    if (!book) return ''
-    
-    const remainingText = book.content.substring(userInput.length)
-    const displayLength = Math.min(remainingText.length, 2000) // Show next 2000 chars
-    
-    return remainingText.substring(0, displayLength)
-  }
-
-  const renderTextWithHighlighting = () => {
+  const renderTypingArea = () => {
     if (!book) return null
 
-    const text = getTextToDisplay()
     const userText = userInput
-    const correctText = book.content.substring(0, userText.length)
+    const fullText = book.content
     
     return (
-      <div className="font-mono text-lg leading-relaxed whitespace-pre-wrap">
-        {/* Show already typed text with highlighting */}
-        {userText.split('').map((char, index) => {
-          const isCorrect = char === correctText[index]
-          return (
-            <span
-              key={index}
-              className={isCorrect ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}
-            >
-              {char}
-            </span>
-          )
-        })}
+      <div className="relative">
+        {/* Hidden textarea that captures input */}
+        <textarea
+          value={userInput}
+          onChange={handleInputChange}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-text resize-none z-10"
+          autoFocus
+          disabled={isCompleted}
+          spellCheck={false}
+        />
         
-        {/* Show remaining text */}
-        <span className="text-gray-700">{text}</span>
+        {/* Visible text with highlighting */}
+        <div 
+          className="min-h-[500px] max-h-[600px] overflow-y-auto p-6 bg-white rounded-lg border-2 border-blue-200 font-mono text-lg leading-relaxed whitespace-pre-wrap cursor-text"
+          onClick={(e) => {
+            // Focus the textarea when clicking anywhere in the display
+            const textarea = e.currentTarget.previousElementSibling as HTMLTextAreaElement
+            textarea?.focus()
+          }}
+        >
+          {fullText.split('').map((char, index) => {
+            if (index < userText.length) {
+              // Already typed - show with highlighting
+              const isCorrect = userText[index] === char
+              return (
+                <span
+                  key={index}
+                  className={
+                    isCorrect 
+                      ? 'text-gray-800' 
+                      : 'bg-red-200 text-red-800 font-bold'
+                  }
+                >
+                  {char}
+                </span>
+              )
+            } else if (index === userText.length) {
+              // Current character - show cursor
+              return (
+                <span key={index} className="relative">
+                  <span className="absolute -left-0.5 top-0 w-0.5 h-full bg-blue-600 animate-pulse"></span>
+                  <span className="text-gray-400">{char}</span>
+                </span>
+              )
+            } else {
+              // Future characters - show in gray
+              return (
+                <span key={index} className="text-gray-400">
+                  {char}
+                </span>
+              )
+            }
+          })}
+        </div>
+        
+        {/* Helper text */}
+        {!isCompleted && userInput.length === 0 && (
+          <p className="text-sm text-gray-500 mt-2 text-center">
+            Click anywhere in the text area to start typing
+          </p>
+        )}
       </div>
     )
   }
@@ -350,7 +408,15 @@ export default function TypingPage() {
                     <span className="text-gray-600">Progress</span>
                     <span className="font-medium">{Math.round(getProgressPercentage())}%</span>
                   </div>
-                  <Progress value={getProgressPercentage()} className="h-2" />
+                  <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full transition-all duration-300 ease-out"
+                      style={{
+                        width: `${getProgressPercentage()}%`,
+                        backgroundColor: `hsl(${getProgressPercentage() * 1.2}, 80%, 50%)`
+                      }}
+                    />
+                  </div>
                 </div>
 
                 <div className="text-center">
@@ -376,32 +442,15 @@ export default function TypingPage() {
               <CardHeader>
                 <CardTitle>Type the text below</CardTitle>
                 <CardDescription>
-                  Start typing to begin. Your progress will be saved automatically.
+                  {isCompleted 
+                    ? "You've completed this book! Review your typing below."
+                    : "Start typing to begin. Your progress will be saved automatically."}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-6">
-                  {/* Text Display */}
-                  <div className="bg-gray-50 p-6 rounded-lg min-h-[400px] max-h-[500px] overflow-y-auto">
-                    {renderTextWithHighlighting()}
-                  </div>
-
-                  {/* Typing Input */}
-                  <div className="space-y-4">
-                    <label htmlFor="typing-input" className="text-sm font-medium text-gray-700">
-                      Your input:
-                    </label>
-                    <textarea
-                      ref={textareaRef}
-                      id="typing-input"
-                      value={userInput}
-                      onChange={handleInputChange}
-                      className="w-full p-4 border border-gray-300 rounded-lg font-mono text-lg leading-relaxed resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      rows={8}
-                      placeholder="Start typing here..."
-                      autoFocus
-                    />
-                  </div>
+                  {/* Unified Typing Area */}
+                  {renderTypingArea()}
 
                   {isCompleted && (
                     <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
@@ -412,11 +461,30 @@ export default function TypingPage() {
                       <p className="text-green-700 mb-4">
                         You've successfully completed "{book.title}"!
                       </p>
-                      <Link href="/library">
-                        <Button>
-                          Back to Library
+                      <div className="flex gap-4 justify-center">
+                        <Link href="/library">
+                          <Button>
+                            Back to Library
+                          </Button>
+                        </Link>
+                        <Button 
+                          variant="outline"
+                          onClick={() => {
+                            setUserInput('')
+                            setKeystrokes([])
+                            setStats({
+                              wpm: 0,
+                              accuracy: 100,
+                              charsTyped: 0,
+                              errors: 0,
+                              startTime: null
+                            })
+                            setIsCompleted(false)
+                          }}
+                        >
+                          Try Again
                         </Button>
-                      </Link>
+                      </div>
                     </div>
                   )}
                 </div>

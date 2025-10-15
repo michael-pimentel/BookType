@@ -17,6 +17,9 @@ const playfair = Playfair_Display({
 export const metadata: Metadata = {
   title: 'BookType - Type Your Favorite Books',
   description: 'A typing practice app where you can type out your favorite books and track your progress',
+  icons: {
+    icon: '/favicon.svg',
+  },
 }
 
 export default function RootLayout({
