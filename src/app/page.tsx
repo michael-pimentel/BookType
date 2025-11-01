@@ -7,52 +7,15 @@ import { AuthModal } from '@/components/AuthModal'
 import { useAuth } from '@/contexts/AuthContext'
 import { BookOpen, Keyboard, Trophy, Users } from 'lucide-react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
 
 export default function HomePage() {
   const [showAuthModal, setShowAuthModal] = useState(false)
-  const { user, signOut } = useAuth()
+  const { user } = useAuth()
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header */}
-      <header className="bg-white/80 backdrop-blur-sm border-b">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center space-x-2">
-            <BookOpen className="h-8 w-8 text-blue-600" />
-            <h1 className="text-2xl font-bold text-gray-900">BookType</h1>
-          </div>
-          <div className="flex items-center space-x-4">
-            {user ? (
-              <div className="flex items-center space-x-4">
-                <span className="text-sm text-gray-600">
-                  Welcome, {user.email}
-                </span>
-                <Link href="/library">
-                  <Button>Go to Library</Button>
-                </Link>
-                <Button 
-                  variant="outline"
-                  onClick={async () => {
-                    const { signOut } = await import('@/contexts/AuthContext')
-                    await supabase.auth.signOut()
-                    window.location.href = '/'
-                  }}
-                >
-                  Sign Out
-                </Button>
-              </div>
-            ) : (
-              <Button onClick={() => setShowAuthModal(true)}>
-                Sign In
-              </Button>
-            )}
-          </div>
-        </div>
-      </header>
-
       {/* Hero Section */}
-      <main className="container mx-auto px-4 py-16">
+      <div className="container mx-auto px-4 py-16">
         <div className="text-center max-w-4xl mx-auto">
           <h1 className="text-5xl font-bold text-gray-900 mb-6">
             Type Your Way Through
@@ -180,7 +143,7 @@ export default function HomePage() {
             </div>
           </div>
         </section>
-      </main>
+      </div>
 
       {/* Footer */}
       <footer className="bg-white/80 backdrop-blur-sm border-t mt-24">

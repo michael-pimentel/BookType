@@ -348,22 +348,17 @@ export default function TypingPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header */}
-      <header className="bg-white/80 backdrop-blur-sm border-b">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center space-x-4">
-            <Link href="/library">
-              <Button variant="ghost" size="sm">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Library
-              </Button>
+      <div className="container mx-auto px-4 py-8">
+        {/* Book Title Section */}
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <Link href="/library" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-2">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Library
             </Link>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">{book.title}</h1>
-              <p className="text-sm text-gray-600">by {book.author}</p>
-            </div>
+            <h1 className="text-2xl font-bold text-gray-900">{book.title}</h1>
+            <p className="text-sm text-gray-600">by {book.author}</p>
           </div>
-          
           {isCompleted && (
             <Badge className="bg-green-100 text-green-800">
               <CheckCircle className="h-4 w-4 mr-1" />
@@ -371,9 +366,6 @@ export default function TypingPage() {
             </Badge>
           )}
         </div>
-      </header>
-
-      <div className="container mx-auto px-4 py-8">
         <div className="grid lg:grid-cols-4 gap-8">
           {/* Typing Stats Sidebar */}
           <div className="lg:col-span-1">
