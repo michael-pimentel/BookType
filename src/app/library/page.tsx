@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { AddBookModal } from '@/contexts/AddBookModal'
+import { AddBookModal } from '@/components/AddBookModal'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { BookOpen, Plus, CheckCircle, Clock } from 'lucide-react'
@@ -51,8 +51,6 @@ export default function LibraryPage() {
     if (!user) return
 
     try {
-      console.log('Fetching books for user:', user.id)
-      
       // First get all books
       const { data: booksData, error: booksError } = await supabase
         .from('books')
@@ -62,8 +60,6 @@ export default function LibraryPage() {
         console.error('Books error:', booksError)
         throw booksError
       }
-
-      console.log('Books data:', booksData)
 
       // Then get user's progress for all books
       const { data: progressData, error: progressError } = await supabase
@@ -76,15 +72,12 @@ export default function LibraryPage() {
         throw progressError
       }
 
-      console.log('Progress data:', progressData)
-
       // Combine books with their progress
       const booksWithProgress: BookWithProgress[] = (booksData || []).map(book => ({
         ...book,
         progress: progressData?.find((p: ProgressData) => p.book_id === book.id) || null
       }))
 
-      console.log('Books with progress:', booksWithProgress)
       setBooks(booksWithProgress)
     } catch (error) {
       console.error('Error fetching books:', error)

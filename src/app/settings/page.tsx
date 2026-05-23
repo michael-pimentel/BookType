@@ -47,7 +47,6 @@ export default function SettingsPage() {
     // 2. Delete the user account from Supabase
     // 3. Sign out the user
     // 4. Redirect to home page
-    console.log('Account deletion requested for:', user?.email)
     alert('Account deletion not yet implemented')
   }
 
@@ -77,7 +76,6 @@ export default function SettingsPage() {
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0]
       if (file) {
-        console.log('Profile picture selected:', file.name)
         // TODO: Upload file and update user profile
         alert('Profile picture upload not yet implemented')
       }

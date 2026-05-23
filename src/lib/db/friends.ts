@@ -4,7 +4,7 @@
 // ============================================
 
 import { createServerClient } from '@/lib/supabase'
-import { Friend, FriendInsert, FriendUpdate } from '@/types/database'
+import { Friend, FriendInsert } from '@/types/database'
 import { Profile } from '@/types/database'
 
 /**
@@ -298,54 +298,4 @@ export async function removeFriend(
   return true
 }
 
-/**
- * Block user
- */
-export async function blockUser(
-  userId: string,
-  blockUserId: string
-): Promise<Friend | null> {
-  const supabase = createServerClient()
-  
-  // Check if relationship exists
-  const existing = await getFriendship(userId, blockUserId)
-  
-  if (existing) {
-    // Update existing relationship to blocked
-    const { data, error } = await supabase
-      .from('friends')
-      .update({ status: 'blocked' })
-      .eq('id', existing.id)
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Error blocking user:', error)
-      return null
-    }
-
-    return data
-  } else {
-    // Create new blocked relationship
-    const block: FriendInsert = {
-      user_id: userId,
-      friend_id: blockUserId,
-      status: 'blocked',
-      requested_by: userId
-    }
-
-    const { data, error } = await supabase
-      .from('friends')
-      .insert(block)
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Error blocking user:', error)
-      return null
-    }
-
-    return data
-  }
-}
 
