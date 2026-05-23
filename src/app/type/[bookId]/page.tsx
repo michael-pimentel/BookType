@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -9,7 +9,8 @@ import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { Book, Progress as ProgressType } from '@/types/database'
-import { ArrowLeft, CheckCircle, Clock, Target, Zap } from 'lucide-react'
+import { useProgressSave } from '@/hooks/useProgressSave'
+import { ArrowLeft, CheckCircle, Target, Zap } from 'lucide-react'
 import Link from 'next/link'
 
 interface TypingStats {
@@ -37,11 +38,10 @@ export default function TypingPage() {
     startTime: null
   })
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
   const [isCompleted, setIsCompleted] = useState(false)
-  
+
   const { user } = useAuth()
-  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  const { saveProgress, saveImmediate } = useProgressSave()
 
   useEffect(() => {
     if (user && bookId) {
@@ -163,56 +163,12 @@ export default function TypingPage() {
     // Check if completed
     if (newInput.length === book!.content.length) {
       setIsCompleted(true)
-      saveProgress(newInput.length, true)
+      saveImmediate(user!.id, bookId, newInput.length, true)
     } else {
-      // Auto-save progress every 100 characters
+      // Debounced auto-save every 100 characters
       if (newInput.length % 100 === 0) {
-        saveProgress(newInput.length, false)
+        saveProgress(user!.id, bookId, newInput.length, false)
       }
-    }
-  }
-
-  const saveProgress = async (charsTyped: number, completed: boolean) => {
-    if (!user || !book) return
-
-    setSaving(true)
-    try {
-      const progressData = {
-        user_id: user.id,
-        book_id: book.id,
-        chars_typed: charsTyped,
-        completed: completed
-      }
-
-      if (currentProgress) {
-        // Update existing progress
-        const { error } = await supabase
-          .from('progress')
-          .update(progressData)
-          .eq('id', currentProgress.id)
-
-        if (error) throw error
-      } else {
-        // Create new progress
-        const { data, error } = await supabase
-          .from('progress')
-          .insert(progressData)
-          .select()
-          .single()
-
-        if (error) throw error
-        if (data) setCurrentProgress(data)
-      }
-
-      setCurrentProgress(prev => prev ? {
-        ...prev,
-        chars_typed: charsTyped,
-        completed: completed
-      } : null)
-    } catch (error) {
-      console.error('Error saving progress:', error)
-    } finally {
-      setSaving(false)
     }
   }
 
@@ -418,12 +374,6 @@ export default function TypingPage() {
                   <p className="text-sm text-gray-600">Characters typed</p>
                 </div>
 
-                {saving && (
-                  <div className="text-center text-sm text-blue-600">
-                    <Clock className="h-4 w-4 inline mr-1" />
-                    Saving progress...
-                  </div>
-                )}
               </CardContent>
             </Card>
           </div>
