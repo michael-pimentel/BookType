@@ -1,6 +1,4 @@
-// tailwind.config.ts
 import type { Config } from "tailwindcss";
-const { fontFamily } = require("tailwindcss/defaultTheme");
 
 const config: Config = {
   darkMode: ["class"],
@@ -54,8 +52,8 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ["var(--font-sans)", ...fontFamily.sans], 
-        serif: ["var(--font-serif)", ...fontFamily.serif], 
+        sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
+        serif: ["var(--font-serif)", "ui-serif", "Georgia", "serif"],
       },
       borderRadius: {
         lg: "var(--radius)",

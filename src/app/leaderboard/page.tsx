@@ -19,13 +19,6 @@ import {
   TabsTrigger,
 } from '@/components/ui/tabs'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
   Table,
   TableBody,
   TableCell,
@@ -40,148 +33,110 @@ import {
   Zap,
   Award,
   Trophy,
-  TrendingUp,
   Clock,
   User,
   Share2,
   ArrowLeft,
+  Loader2,
 } from 'lucide-react'
-import {
-  mockLeaderboardUsers,
-  getUsersByBooks,
-  getUsersByWPM,
-  getUsersByOverall,
-  type LeaderboardUser,
-} from '@/lib/leaderboardMock'
 
-type TimeRange = 'week' | 'month' | 'allTime'
 type LeaderboardType = 'books' | 'wpm' | 'overall'
 type ViewMode = 'global' | 'friends'
 
+interface LeaderboardEntry {
+  rank: number
+  userId: string
+  username: string
+  displayName: string | null
+  avatarUrl: string | null
+  booksCompleted: number
+  averageWpm: number
+  overallScore: number
+}
+
+const podiumConfig = [
+  { position: 2, class: 'order-2 lg:order-1' },
+  { position: 1, class: 'order-1 lg:order-2' },
+  { position: 3, class: 'order-3 lg:order-3' },
+]
+
+const podiumColors = [
+  { bg: 'from-gray-300 to-slate-400', border: 'border-gray-400', icon: '🥈' },
+  { bg: 'from-yellow-400 to-amber-500', border: 'border-yellow-400', icon: '🥇' },
+  { bg: 'from-orange-400 to-amber-600', border: 'border-orange-400', icon: '🥉' },
+]
+
+const podiumHeights = ['h-32', 'h-40', 'h-28']
+
+function getUserInitials(name: string) {
+  return name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
+}
+
+function getDisplayName(entry: LeaderboardEntry) {
+  return entry.displayName || entry.username
+}
+
 export default function LeaderboardPage() {
   const { user } = useAuth()
-  const [timeRange, setTimeRange] = useState<TimeRange>('allTime')
   const [viewMode, setViewMode] = useState<ViewMode>('global')
   const [activeTab, setActiveTab] = useState<LeaderboardType>('books')
+  const [entries, setEntries] = useState<LeaderboardEntry[]>([])
+  const [currentUserRank, setCurrentUserRank] = useState<number | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  // Get current user's data (mock - in real app, fetch from Supabase)
-  const currentUserData: LeaderboardUser | null = useMemo(() => {
-    if (!user) return null
-    // Find or create mock data for current user
-    const found = mockLeaderboardUsers.find((u) => u.id === user.id)
-    if (found) return found
-    // Return a placeholder if user not in mock data
-    return {
-      id: user.id,
-      name: user.email?.split('@')[0] || 'You',
-      username: user.email?.split('@')[0] || 'you',
-      booksTyped: 5,
-      wpm: 95,
-      overallScore: 5 * 10 + 95 / 2,
-      totalTimeHours: 12,
-    }
-  }, [user])
+  useEffect(() => {
+    if (!user) return
+    fetchLeaderboard()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, viewMode, user])
 
-  // Get sorted users based on active tab
-  const sortedUsers = useMemo(() => {
-    // TODO: Replace with Supabase query filtered by timeRange
-    let users = [...mockLeaderboardUsers]
-
-    switch (activeTab) {
-      case 'books':
-        return getUsersByBooks(users)
-      case 'wpm':
-        return getUsersByWPM(users)
-      case 'overall':
-        return getUsersByOverall(users)
-      default:
-        return users
-    }
-  }, [activeTab])
-
-  // Get top 3 for podium
-  const topThree = useMemo(() => {
-    return sortedUsers.slice(0, 3)
-  }, [sortedUsers])
-
-  // Get remaining users (rank 4+)
-  const remainingUsers = useMemo(() => {
-    return sortedUsers.slice(3)
-  }, [sortedUsers])
-
-  // Get current user's rank
-  const currentUserRank = useMemo(() => {
-    if (!currentUserData) return null
-    const index = sortedUsers.findIndex((u) => u.id === currentUserData.id)
-    return index >= 0 ? index + 1 : null
-  }, [sortedUsers, currentUserData])
-
-  // Get value for current tab
-  const getValue = (user: LeaderboardUser): number => {
-    switch (activeTab) {
-      case 'books':
-        return user.booksTyped
-      case 'wpm':
-        return user.wpm
-      case 'overall':
-        return Math.round(user.overallScore)
-      default:
-        return 0
+  const fetchLeaderboard = async () => {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams({
+        type: activeTab,
+        friendsOnly: String(viewMode === 'friends'),
+        limit: '50',
+      })
+      const res = await fetch(`/api/leaderboard?${params}`)
+      if (!res.ok) return
+      const json = await res.json()
+      if (json.success && json.data) {
+        setEntries(json.data.entries)
+        setCurrentUserRank(json.data.currentUserRank || null)
+      }
+    } catch (e) {
+      console.error('Failed to fetch leaderboard:', e)
+    } finally {
+      setLoading(false)
     }
   }
 
-  // Get label for current tab
-  const getValueLabel = (): string => {
+  const currentUserEntry = useMemo(
+    () => entries.find((e) => e.userId === user?.id) || null,
+    [entries, user]
+  )
+
+  const topThree = entries.slice(0, 3)
+  const remainingUsers = entries.slice(3)
+
+  const getTabValue = (entry: LeaderboardEntry): number => {
     switch (activeTab) {
-      case 'books':
-        return 'Books'
-      case 'wpm':
-        return 'WPM'
-      case 'overall':
-        return 'Score'
-      default:
-        return ''
+      case 'books': return entry.booksCompleted
+      case 'wpm': return Math.round(entry.averageWpm)
+      case 'overall': return Math.round(entry.overallScore)
     }
   }
 
-  // Get icon for current tab
-  const getIcon = () => {
+  const getTabUnit = (): string => {
     switch (activeTab) {
-      case 'books':
-        return BookOpen
-      case 'wpm':
-        return Zap
-      case 'overall':
-        return Award
-      default:
-        return Trophy
+      case 'books': return 'books'
+      case 'wpm': return 'WPM'
+      case 'overall': return 'score'
     }
   }
 
-  // Get user initials for avatar
-  const getUserInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2)
-  }
-
-  // Podium configuration
-  const podiumConfig = [
-    { position: 2, class: 'order-2 lg:order-1' },
-    { position: 1, class: 'order-1 lg:order-2' },
-    { position: 3, class: 'order-3 lg:order-3' },
-  ]
-
-  const podiumColors = [
-    { bg: 'from-gray-300 to-slate-400', border: 'border-gray-400', icon: '🥈' },
-    { bg: 'from-yellow-400 to-amber-500', border: 'border-yellow-400', icon: '🥇' },
-    { bg: 'from-orange-400 to-amber-600', border: 'border-orange-400', icon: '🥉' },
-  ]
-
-  const podiumHeights = ['h-32', 'h-40', 'h-28']
+  const TabIcon = activeTab === 'books' ? BookOpen : activeTab === 'wpm' ? Zap : Award
 
   if (!user) {
     return (
@@ -189,26 +144,144 @@ export default function LeaderboardPage() {
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <CardTitle>Sign In Required</CardTitle>
-            <CardDescription>
-              Please sign in to view the leaderboard
-            </CardDescription>
+            <CardDescription>Please sign in to view the leaderboard</CardDescription>
           </CardHeader>
           <CardContent>
-            <Link href="/">
-              <Button className="w-full">Go to Home</Button>
-            </Link>
+            <Link href="/"><Button className="w-full">Go to Home</Button></Link>
           </CardContent>
         </Card>
       </div>
     )
   }
 
-  const TabIcon = getIcon()
+  const renderPodium = () => {
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      )
+    }
+    if (topThree.length < 3) {
+      return (
+        <p className="text-center text-muted-foreground py-8">
+          {viewMode === 'friends' ? 'Not enough friends on the leaderboard yet.' : 'Not enough users yet.'}
+        </p>
+      )
+    }
+    return (
+      <Card className="bg-gradient-to-br from-muted/50 to-muted/30 border-2">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-xl font-semibold text-center">Top 3 Performers</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 items-end">
+            {podiumConfig.map((config, index) => {
+              const entry = topThree[config.position - 1]
+              const podium = podiumColors[config.position - 1]
+              const height = podiumHeights[config.position - 1]
+              const name = getDisplayName(entry)
+              return (
+                <motion.div
+                  key={entry.userId}
+                  initial={{ opacity: 0, y: 50 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.1, duration: 0.5 }}
+                  className={config.class}
+                >
+                  <Card className={`bg-gradient-to-b ${podium.bg} border-2 ${podium.border} shadow-lg hover:shadow-xl transition-all ${height} flex flex-col justify-end min-h-[280px] sm:min-h-[320px]`}>
+                    <CardContent className="p-4 pb-6 text-center flex flex-col justify-end h-full">
+                      <div className="text-3xl mb-3">{podium.icon}</div>
+                      <Avatar className="h-16 w-16 mx-auto mb-3 border-2 border-background shadow-md">
+                        <AvatarImage src={entry.avatarUrl || undefined} alt={name} />
+                        <AvatarFallback className="bg-background/20 text-background font-bold">
+                          {getUserInitials(name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <p className="font-bold text-background text-sm truncate mb-1">{name}</p>
+                      <p className="text-background/90 text-xs mb-2">@{entry.username}</p>
+                      <div className="bg-background/20 rounded-lg px-3 py-1">
+                        <p className="text-2xl font-bold text-background">{getTabValue(entry)}</p>
+                        <p className="text-xs text-background/90">{getTabUnit()}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const renderTable = (columns: { label: string; render: (e: LeaderboardEntry) => React.ReactNode }[]) => {
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      )
+    }
+    if (remainingUsers.length === 0) {
+      return <p className="text-center text-muted-foreground py-8">No additional users to show.</p>
+    }
+    return (
+      <div className="rounded-lg border bg-card overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-16">Rank</TableHead>
+              <TableHead>User</TableHead>
+              {columns.map((c) => (
+                <TableHead key={c.label} className="text-right">{c.label}</TableHead>
+              ))}
+              <TableHead className="text-right">Profile</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {remainingUsers.map((entry, index) => {
+              const rank = index + 4
+              const isCurrentUser = entry.userId === user?.id
+              const name = getDisplayName(entry)
+              return (
+                <TableRow
+                  key={entry.userId}
+                  className={isCurrentUser ? 'bg-primary/10 border-l-4 border-l-primary' : ''}
+                >
+                  <TableCell className="font-semibold">#{rank}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={entry.avatarUrl || undefined} alt={name} />
+                        <AvatarFallback>{getUserInitials(name)}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium text-sm">{name}</p>
+                        <p className="text-xs text-muted-foreground">@{entry.username}</p>
+                      </div>
+                    </div>
+                  </TableCell>
+                  {columns.map((c) => (
+                    <TableCell key={c.label} className="text-right">{c.render(entry)}</TableCell>
+                  ))}
+                  <TableCell className="text-right">
+                    <Link href={`/profile/${entry.username}`}>
+                      <Button variant="ghost" size="sm">View</Button>
+                    </Link>
+                  </TableCell>
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <div className="container mx-auto px-4 sm:px-6 py-8 max-w-7xl">
-        {/* Back Button */}
         <Link
           href="/"
           className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900 mb-6 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-sm"
@@ -218,30 +291,15 @@ export default function LeaderboardPage() {
           Back to Home
         </Link>
 
-        {/* Page Header */}
         <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-4xl font-bold text-gray-900 mb-2 flex items-center gap-3">
               <Trophy className="h-8 w-8 text-yellow-500" />
               Leaderboard
             </h1>
-            <p className="text-gray-600">
-              Compete with other BookType users and track your progress
-            </p>
+            <p className="text-gray-600">Compete with other BookType users and track your progress</p>
           </div>
-
-          {/* Filters */}
           <div className="flex flex-wrap gap-3">
-            <Select value={timeRange} onValueChange={(v) => setTimeRange(v as TimeRange)}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="Time range" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="week">This Week</SelectItem>
-                <SelectItem value="month">This Month</SelectItem>
-                <SelectItem value="allTime">All Time</SelectItem>
-              </SelectContent>
-            </Select>
             <Button
               variant={viewMode === 'global' ? 'default' : 'outline'}
               size="sm"
@@ -260,63 +318,53 @@ export default function LeaderboardPage() {
         </div>
 
         <div className="grid lg:grid-cols-4 gap-6 lg:gap-8">
-          {/* Main Leaderboard - Left Side (3 columns) */}
           <div className="lg:col-span-3 space-y-6 lg:space-y-8">
-            {/* User Stats Panel */}
-            {currentUserData && (
-              <Card className="bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <User className="h-5 w-5" />
-                    Your Stats
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="text-center">
-                      <div className="flex items-center justify-center gap-2 mb-1">
-                        <Award className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">Rank</span>
-                      </div>
-                      <p className="text-2xl font-bold">
-                        {currentUserRank ? `#${currentUserRank}` : '—'}
-                      </p>
+            {/* Your Stats */}
+            <Card className="bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <User className="h-5 w-5" />
+                  Your Stats
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div className="text-center">
+                    <div className="flex items-center justify-center gap-2 mb-1">
+                      <Award className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Rank</span>
                     </div>
-                    <div className="text-center">
-                      <div className="flex items-center justify-center gap-2 mb-1">
-                        <BookOpen className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">Books</span>
-                      </div>
-                      <p className="text-2xl font-bold">{currentUserData.booksTyped}</p>
-                    </div>
-                    <div className="text-center">
-                      <div className="flex items-center justify-center gap-2 mb-1">
-                        <Zap className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">WPM</span>
-                      </div>
-                      <p className="text-2xl font-bold">{currentUserData.wpm}</p>
-                    </div>
-                    <div className="text-center">
-                      <div className="flex items-center justify-center gap-2 mb-1">
-                        <Clock className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">Hours</span>
-                      </div>
-                      <p className="text-2xl font-bold">
-                        {currentUserData.totalTimeHours || 0}
-                      </p>
-                    </div>
+                    <p className="text-2xl font-bold">
+                      {loading ? '—' : currentUserRank ? `#${currentUserRank}` : '—'}
+                    </p>
                   </div>
-                </CardContent>
-              </Card>
-            )}
+                  <div className="text-center">
+                    <div className="flex items-center justify-center gap-2 mb-1">
+                      <BookOpen className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Books</span>
+                    </div>
+                    <p className="text-2xl font-bold">
+                      {loading ? '—' : currentUserEntry?.booksCompleted ?? '—'}
+                    </p>
+                  </div>
+                  <div className="text-center">
+                    <div className="flex items-center justify-center gap-2 mb-1">
+                      <Zap className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Avg WPM</span>
+                    </div>
+                    <p className="text-2xl font-bold">
+                      {loading ? '—' : currentUserEntry ? Math.round(currentUserEntry.averageWpm) : '—'}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-            {/* Leaderboard Tabs */}
+            {/* Tabs */}
             <Card>
               <CardHeader className="pb-4">
                 <CardTitle className="mb-2">Leaderboard Rankings</CardTitle>
-                <CardDescription>
-                  Top performers across different categories
-                </CardDescription>
+                <CardDescription>Top performers across different categories</CardDescription>
               </CardHeader>
               <CardContent>
                 <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as LeaderboardType)}>
@@ -338,461 +386,61 @@ export default function LeaderboardPage() {
                     </TabsTrigger>
                   </TabsList>
 
-                  {/* Most Books Typed Tab */}
                   <TabsContent value="books" className="mt-0">
                     <AnimatePresence mode="wait">
-                      <motion.div
-                        key="books"
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        transition={{ duration: 0.3 }}
-                        className="space-y-8"
-                      >
-                        {/* Podium */}
-                        {topThree.length >= 3 && (
-                          <Card className="bg-gradient-to-br from-muted/50 to-muted/30 border-2">
-                            <CardHeader className="pb-4">
-                              <CardTitle className="text-xl font-semibold text-center">
-                                Top 3 Performers
-                              </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 items-end">
-                              {podiumConfig.map((config, index) => {
-                                const user = topThree[config.position - 1]
-                                const podium = podiumColors[config.position - 1]
-                                const height = podiumHeights[config.position - 1]
-
-                                return (
-                                  <motion.div
-                                    key={user.id}
-                                    initial={{ opacity: 0, y: 50 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: index * 0.1, duration: 0.5 }}
-                                    className={config.class}
-                                  >
-                                    <Card
-                                      className={`bg-gradient-to-b ${podium.bg} border-2 ${podium.border} shadow-lg hover:shadow-xl transition-all ${height} flex flex-col justify-end min-h-[280px] sm:min-h-[320px]`}
-                                    >
-                                      <CardContent className="p-4 pb-6 text-center flex flex-col justify-end h-full">
-                                        <div className="text-3xl mb-3">{podium.icon}</div>
-                                        <Avatar className="h-16 w-16 mx-auto mb-3 border-2 border-background shadow-md">
-                                          <AvatarImage src={user.avatar} alt={user.name} />
-                                          <AvatarFallback className="bg-background/20 text-background font-bold">
-                                            {getUserInitials(user.name)}
-                                          </AvatarFallback>
-                                        </Avatar>
-                                        <p className="font-bold text-background text-sm truncate mb-1">
-                                          {user.name}
-                                        </p>
-                                        <p className="text-background/90 text-xs mb-2">
-                                          @{user.username}
-                                        </p>
-                                        <div className="bg-background/20 rounded-lg px-3 py-1">
-                                          <p className="text-2xl font-bold text-background">
-                                            {user.booksTyped}
-                                          </p>
-                                          <p className="text-xs text-background/90">books</p>
-                                        </div>
-                                      </CardContent>
-                                    </Card>
-                                  </motion.div>
-                                )
-                              })}
-                              </div>
-                            </CardContent>
-                          </Card>
-                        )}
-
-                        {/* Full Rankings Table */}
+                      <motion.div key="books" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }} className="space-y-8">
+                        {renderPodium()}
                         <Card>
                           <CardHeader className="pb-4">
                             <CardTitle className="text-lg font-semibold">Full Rankings</CardTitle>
-                            <CardDescription>
-                              Complete leaderboard rankings
-                            </CardDescription>
+                            <CardDescription>Complete leaderboard rankings</CardDescription>
                           </CardHeader>
                           <CardContent>
-                            <div className="rounded-lg border bg-card overflow-hidden">
-                              <Table>
-                                <TableHeader>
-                                <TableRow>
-                                  <TableHead className="w-16">Rank</TableHead>
-                                  <TableHead>User</TableHead>
-                                  <TableHead className="text-right">Books</TableHead>
-                                  <TableHead className="text-right">WPM</TableHead>
-                                  <TableHead className="text-right">Action</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {remainingUsers.map((user, index) => {
-                                  const rank = index + 4
-                                  const isCurrentUser = user.id === currentUserData?.id
-
-                                  return (
-                                    <motion.tr
-                                      key={user.id}
-                                      initial={{ opacity: 0, x: -20 }}
-                                      animate={{ opacity: 1, x: 0 }}
-                                      transition={{ delay: index * 0.05 }}
-                                    >
-                                      <TableRow
-                                        className={
-                                          isCurrentUser
-                                            ? 'bg-primary/10 border-l-4 border-l-primary'
-                                            : ''
-                                        }
-                                      >
-                                        <TableCell className="font-semibold">
-                                          #{rank}
-                                        </TableCell>
-                                        <TableCell>
-                                          <div className="flex items-center gap-3">
-                                            <Avatar className="h-10 w-10">
-                                              <AvatarImage src={user.avatar} alt={user.name} />
-                                              <AvatarFallback>
-                                                {getUserInitials(user.name)}
-                                              </AvatarFallback>
-                                            </Avatar>
-                                            <div>
-                                              <p className="font-medium text-sm">{user.name}</p>
-                                              <p className="text-xs text-muted-foreground">
-                                                @{user.username}
-                                              </p>
-                                            </div>
-                                          </div>
-                                        </TableCell>
-                                        <TableCell className="text-right font-semibold">
-                                          {user.booksTyped}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                          <Badge variant="secondary">{user.wpm} WPM</Badge>
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                          <Link href={`/profile/${user.id}`}>
-                                            <Button variant="ghost" size="sm">
-                                              View
-                                            </Button>
-                                          </Link>
-                                        </TableCell>
-                                      </TableRow>
-                                    </motion.tr>
-                                  )
-                                })}
-                              </TableBody>
-                            </Table>
-                            </div>
+                            {renderTable([
+                              { label: 'Books', render: (e) => <span className="font-semibold">{e.booksCompleted}</span> },
+                              { label: 'WPM', render: (e) => <Badge variant="secondary">{Math.round(e.averageWpm)} WPM</Badge> },
+                            ])}
                           </CardContent>
                         </Card>
                       </motion.div>
                     </AnimatePresence>
                   </TabsContent>
 
-                  {/* Fastest Typers Tab */}
                   <TabsContent value="wpm" className="mt-0">
                     <AnimatePresence mode="wait">
-                      <motion.div
-                        key="wpm"
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        transition={{ duration: 0.3 }}
-                        className="space-y-8"
-                      >
-                        {/* Podium */}
-                        {topThree.length >= 3 && (
-                          <Card className="bg-gradient-to-br from-muted/50 to-muted/30 border-2 mb-8">
-                            <CardHeader className="pb-4">
-                              <CardTitle className="text-xl font-semibold text-center">
-                                Top 3 Performers
-                              </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 items-end">
-                              {podiumConfig.map((config, index) => {
-                                const user = topThree[config.position - 1]
-                                const podium = podiumColors[config.position - 1]
-                                const height = podiumHeights[config.position - 1]
-
-                                return (
-                                  <motion.div
-                                    key={user.id}
-                                    initial={{ opacity: 0, y: 50 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: index * 0.1, duration: 0.5 }}
-                                    className={config.class}
-                                  >
-                                    <Card
-                                      className={`bg-gradient-to-b ${podium.bg} border-2 ${podium.border} shadow-lg hover:shadow-xl transition-all ${height} flex flex-col justify-end min-h-[280px] sm:min-h-[320px]`}
-                                    >
-                                      <CardContent className="p-4 pb-6 text-center flex flex-col justify-end h-full">
-                                        <div className="text-3xl mb-3">{podium.icon}</div>
-                                        <Avatar className="h-16 w-16 mx-auto mb-3 border-2 border-background shadow-md">
-                                          <AvatarImage src={user.avatar} alt={user.name} />
-                                          <AvatarFallback className="bg-background/20 text-background font-bold">
-                                            {getUserInitials(user.name)}
-                                          </AvatarFallback>
-                                        </Avatar>
-                                        <p className="font-bold text-background text-sm truncate mb-1">
-                                          {user.name}
-                                        </p>
-                                        <p className="text-background/90 text-xs mb-2">
-                                          @{user.username}
-                                        </p>
-                                        <div className="bg-background/20 rounded-lg px-3 py-1">
-                                          <p className="text-2xl font-bold text-background">
-                                            {user.wpm}
-                                          </p>
-                                          <p className="text-xs text-background/90">WPM</p>
-                                        </div>
-                                      </CardContent>
-                                    </Card>
-                                  </motion.div>
-                                )
-                              })}
-                              </div>
-                            </CardContent>
-                          </Card>
-                        )}
-
-                        {/* Full Rankings Table */}
+                      <motion.div key="wpm" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }} className="space-y-8">
+                        {renderPodium()}
                         <Card>
                           <CardHeader className="pb-4">
                             <CardTitle className="text-lg font-semibold">Full Rankings</CardTitle>
-                            <CardDescription>
-                              Complete leaderboard rankings
-                            </CardDescription>
+                            <CardDescription>Complete leaderboard rankings</CardDescription>
                           </CardHeader>
                           <CardContent>
-                            <div className="rounded-lg border bg-card overflow-hidden">
-                              <Table>
-                                <TableHeader>
-                                <TableRow>
-                                  <TableHead className="w-16">Rank</TableHead>
-                                  <TableHead>User</TableHead>
-                                  <TableHead className="text-right">WPM</TableHead>
-                                  <TableHead className="text-right">Books</TableHead>
-                                  <TableHead className="text-right">Action</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {remainingUsers.map((user, index) => {
-                                  const rank = index + 4
-                                  const isCurrentUser = user.id === currentUserData?.id
-
-                                  return (
-                                    <motion.tr
-                                      key={user.id}
-                                      initial={{ opacity: 0, x: -20 }}
-                                      animate={{ opacity: 1, x: 0 }}
-                                      transition={{ delay: index * 0.05 }}
-                                    >
-                                      <TableRow
-                                        className={
-                                          isCurrentUser
-                                            ? 'bg-primary/10 border-l-4 border-l-primary'
-                                            : ''
-                                        }
-                                      >
-                                        <TableCell className="font-semibold">
-                                          #{rank}
-                                        </TableCell>
-                                        <TableCell>
-                                          <div className="flex items-center gap-3">
-                                            <Avatar className="h-10 w-10">
-                                              <AvatarImage src={user.avatar} alt={user.name} />
-                                              <AvatarFallback>
-                                                {getUserInitials(user.name)}
-                                              </AvatarFallback>
-                                            </Avatar>
-                                            <div>
-                                              <p className="font-medium text-sm">{user.name}</p>
-                                              <p className="text-xs text-muted-foreground">
-                                                @{user.username}
-                                              </p>
-                                            </div>
-                                          </div>
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                          <Badge variant="secondary" className="font-semibold">
-                                            {user.wpm} WPM
-                                          </Badge>
-                                        </TableCell>
-                                        <TableCell className="text-right font-semibold">
-                                          {user.booksTyped}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                          <Link href={`/profile/${user.id}`}>
-                                            <Button variant="ghost" size="sm">
-                                              View
-                                            </Button>
-                                          </Link>
-                                        </TableCell>
-                                      </TableRow>
-                                    </motion.tr>
-                                  )
-                                })}
-                              </TableBody>
-                            </Table>
-                            </div>
+                            {renderTable([
+                              { label: 'WPM', render: (e) => <Badge variant="secondary" className="font-semibold">{Math.round(e.averageWpm)} WPM</Badge> },
+                              { label: 'Books', render: (e) => <span className="font-semibold">{e.booksCompleted}</span> },
+                            ])}
                           </CardContent>
                         </Card>
                       </motion.div>
                     </AnimatePresence>
                   </TabsContent>
 
-                  {/* Top Overall Tab */}
                   <TabsContent value="overall" className="mt-0">
                     <AnimatePresence mode="wait">
-                      <motion.div
-                        key="overall"
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        transition={{ duration: 0.3 }}
-                        className="space-y-8"
-                      >
-                        {/* Podium */}
-                        {topThree.length >= 3 && (
-                          <Card className="bg-gradient-to-br from-muted/50 to-muted/30 border-2 mb-8">
-                            <CardHeader className="pb-4">
-                              <CardTitle className="text-xl font-semibold text-center">
-                                Top 3 Performers
-                              </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 items-end">
-                              {podiumConfig.map((config, index) => {
-                                const user = topThree[config.position - 1]
-                                const podium = podiumColors[config.position - 1]
-                                const height = podiumHeights[config.position - 1]
-
-                                return (
-                                  <motion.div
-                                    key={user.id}
-                                    initial={{ opacity: 0, y: 50 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: index * 0.1, duration: 0.5 }}
-                                    className={config.class}
-                                  >
-                                    <Card
-                                      className={`bg-gradient-to-b ${podium.bg} border-2 ${podium.border} shadow-lg hover:shadow-xl transition-all ${height} flex flex-col justify-end min-h-[280px] sm:min-h-[320px]`}
-                                    >
-                                      <CardContent className="p-4 pb-6 text-center flex flex-col justify-end h-full">
-                                        <div className="text-3xl mb-3">{podium.icon}</div>
-                                        <Avatar className="h-16 w-16 mx-auto mb-3 border-2 border-background shadow-md">
-                                          <AvatarImage src={user.avatar} alt={user.name} />
-                                          <AvatarFallback className="bg-background/20 text-background font-bold">
-                                            {getUserInitials(user.name)}
-                                          </AvatarFallback>
-                                        </Avatar>
-                                        <p className="font-bold text-background text-sm truncate mb-1">
-                                          {user.name}
-                                        </p>
-                                        <p className="text-background/90 text-xs mb-2">
-                                          @{user.username}
-                                        </p>
-                                        <div className="bg-background/20 rounded-lg px-3 py-1">
-                                          <p className="text-2xl font-bold text-background">
-                                            {Math.round(user.overallScore)}
-                                          </p>
-                                          <p className="text-xs text-background/90">score</p>
-                                        </div>
-                                      </CardContent>
-                                    </Card>
-                                  </motion.div>
-                                )
-                              })}
-                              </div>
-                            </CardContent>
-                          </Card>
-                        )}
-
-                        {/* Full Rankings Table */}
+                      <motion.div key="overall" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }} className="space-y-8">
+                        {renderPodium()}
                         <Card>
                           <CardHeader className="pb-4">
                             <CardTitle className="text-lg font-semibold">Full Rankings</CardTitle>
-                            <CardDescription>
-                              Complete leaderboard rankings
-                            </CardDescription>
+                            <CardDescription>Complete leaderboard rankings</CardDescription>
                           </CardHeader>
                           <CardContent>
-                            <div className="rounded-lg border bg-card overflow-hidden">
-                              <Table>
-                                <TableHeader>
-                                <TableRow>
-                                  <TableHead className="w-16">Rank</TableHead>
-                                  <TableHead>User</TableHead>
-                                  <TableHead className="text-right">Score</TableHead>
-                                  <TableHead className="text-right">Books</TableHead>
-                                  <TableHead className="text-right">WPM</TableHead>
-                                  <TableHead className="text-right">Action</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {remainingUsers.map((user, index) => {
-                                  const rank = index + 4
-                                  const isCurrentUser = user.id === currentUserData?.id
-
-                                  return (
-                                    <motion.tr
-                                      key={user.id}
-                                      initial={{ opacity: 0, x: -20 }}
-                                      animate={{ opacity: 1, x: 0 }}
-                                      transition={{ delay: index * 0.05 }}
-                                    >
-                                      <TableRow
-                                        className={
-                                          isCurrentUser
-                                            ? 'bg-primary/10 border-l-4 border-l-primary'
-                                            : ''
-                                        }
-                                      >
-                                        <TableCell className="font-semibold">
-                                          #{rank}
-                                        </TableCell>
-                                        <TableCell>
-                                          <div className="flex items-center gap-3">
-                                            <Avatar className="h-10 w-10">
-                                              <AvatarImage src={user.avatar} alt={user.name} />
-                                              <AvatarFallback>
-                                                {getUserInitials(user.name)}
-                                              </AvatarFallback>
-                                            </Avatar>
-                                            <div>
-                                              <p className="font-medium text-sm">{user.name}</p>
-                                              <p className="text-xs text-muted-foreground">
-                                                @{user.username}
-                                              </p>
-                                            </div>
-                                          </div>
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                          <Badge variant="default" className="font-semibold">
-                                            {Math.round(user.overallScore)}
-                                          </Badge>
-                                        </TableCell>
-                                        <TableCell className="text-right font-semibold">
-                                          {user.booksTyped}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                          <Badge variant="secondary">{user.wpm} WPM</Badge>
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                          <Link href={`/profile/${user.id}`}>
-                                            <Button variant="ghost" size="sm">
-                                              View
-                                            </Button>
-                                          </Link>
-                                        </TableCell>
-                                      </TableRow>
-                                    </motion.tr>
-                                  )
-                                })}
-                              </TableBody>
-                            </Table>
-                            </div>
+                            {renderTable([
+                              { label: 'Score', render: (e) => <Badge variant="default" className="font-semibold">{Math.round(e.overallScore)}</Badge> },
+                              { label: 'Books', render: (e) => <span className="font-semibold">{e.booksCompleted}</span> },
+                              { label: 'WPM', render: (e) => <Badge variant="secondary">{Math.round(e.averageWpm)} WPM</Badge> },
+                            ])}
                           </CardContent>
                         </Card>
                       </motion.div>
@@ -803,9 +451,8 @@ export default function LeaderboardPage() {
             </Card>
           </div>
 
-          {/* Right Sidebar - Additional Info */}
+          {/* Sidebar */}
           <div className="lg:col-span-1 space-y-6">
-            {/* How It Works */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">How It Works</CardTitle>
@@ -826,8 +473,7 @@ export default function LeaderboardPage() {
               </CardContent>
             </Card>
 
-            {/* Share Section */}
-            {currentUserData && currentUserRank && (
+            {currentUserRank && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Share Your Rank</CardTitle>
@@ -837,9 +483,8 @@ export default function LeaderboardPage() {
                     className="w-full"
                     variant="outline"
                     onClick={() => {
-                      // TODO: Implement share functionality
                       navigator.clipboard.writeText(
-                        `${window.location.origin}/leaderboard?highlight=${user.id}`
+                        `${window.location.origin}/profile/${user?.email?.split('@')[0]}`
                       )
                     }}
                   >
@@ -855,4 +500,3 @@ export default function LeaderboardPage() {
     </div>
   )
 }
-
