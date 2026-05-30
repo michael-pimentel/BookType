@@ -401,7 +401,7 @@ export default function TypingPage() {
                         Congratulations!
                       </h3>
                       <p className="text-green-700 mb-4">
-                        You've successfully completed "{book.title}"!
+                        You&apos;ve successfully completed &ldquo;{book.title}&rdquo;!
                       </p>
                       <div className="flex gap-4 justify-center">
                         <Link href="/library">
