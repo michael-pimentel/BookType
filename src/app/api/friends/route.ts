@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
         avatarUrl: f.friend_profile.avatar_url,
         status: f.status,
         isOnline: false, // TODO: Implement online status tracking
-        lastSeen: null // TODO: Implement last seen tracking
+        lastSeen: undefined // TODO: Implement last seen tracking
       }))
     }
 

@@ -11,7 +11,7 @@ import { getFriendship } from '@/lib/db/friends'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
     const authResult = await requireAuth(request)
@@ -21,7 +21,7 @@ export async function GET(
     }
 
     const currentUserId = authResult.id
-    const { userId } = params
+    const { userId } = await params
 
     // Get profile
     const profile = await getProfileWithStats(userId)

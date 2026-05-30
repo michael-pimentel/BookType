@@ -11,17 +11,17 @@ import { isValidUUID } from '@/lib/utils/validation'
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { friendId: string } }
+  { params }: { params: Promise<{ friendId: string }> }
 ) {
   try {
     const authResult = await requireAuth(request)
-    
+
     if (authResult instanceof NextResponse) {
       return authResult
     }
 
     const userId = authResult.id
-    const { friendId } = params
+    const { friendId } = await params
 
     // Validation
     if (!isValidUUID(friendId)) {

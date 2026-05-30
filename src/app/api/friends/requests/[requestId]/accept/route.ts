@@ -10,7 +10,7 @@ import { acceptFriendRequest } from '@/lib/db/friends'
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { requestId: string } }
+  { params }: { params: Promise<{ requestId: string }> }
 ) {
   try {
     const authResult = await requireAuth(request)
@@ -20,7 +20,7 @@ export async function POST(
     }
 
     const userId = authResult.id
-    const { requestId } = params
+    const { requestId } = await params
 
     // Accept friend request
     const friendship = await acceptFriendRequest(requestId, userId)
