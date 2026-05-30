@@ -45,6 +45,7 @@ export default function LibraryPage() {
     if (user) {
       fetchBooks()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
   const fetchBooks = async () => {

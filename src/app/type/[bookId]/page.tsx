@@ -47,6 +47,7 @@ export default function TypingPage() {
     if (user && bookId) {
       fetchBookAndProgress()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, bookId])
 
   // Calculate stats immediately when userInput or keystrokes change
@@ -54,6 +55,7 @@ export default function TypingPage() {
     if (userInput.length > 0) {
       calculateStats()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userInput, keystrokes])
 
   const fetchBookAndProgress = async () => {

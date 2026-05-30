@@ -97,7 +97,7 @@ export default function LeaderboardPage() {
       default:
         return users
     }
-  }, [activeTab, timeRange])
+  }, [activeTab])
 
   // Get top 3 for podium
   const topThree = useMemo(() => {
