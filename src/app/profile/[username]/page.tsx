@@ -391,7 +391,7 @@ export default function ProfilePage() {
               <CardHeader>
                 <CardTitle>Books</CardTitle>
                 <CardDescription>
-                  Books you've completed and are currently typing
+                  Books you&apos;ve completed and are currently typing
                 </CardDescription>
               </CardHeader>
               <CardContent>

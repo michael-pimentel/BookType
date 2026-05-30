@@ -44,6 +44,7 @@ export default function Header() {
   }
 
   return (
+    <>
     <header className="fixed top-0 z-50 w-full border-b bg-white/80 backdrop-blur-sm shadow-sm">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         {/* Logo/Title on the left */}
@@ -186,11 +187,12 @@ export default function Header() {
         </nav>
       </div>
 
-      {/* Auth Modal */}
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-      />
     </header>
+
+    <AuthModal
+      isOpen={isAuthModalOpen}
+      onClose={() => setIsAuthModalOpen(false)}
+    />
+    </>
   )
 }

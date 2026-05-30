@@ -289,7 +289,7 @@ export default function TypingPage() {
           <CardHeader className="text-center">
             <CardTitle>Book Not Found</CardTitle>
             <CardDescription>
-              The book you're looking for doesn't exist
+              The book you&apos;re looking for doesn&apos;t exist
             </CardDescription>
           </CardHeader>
           <CardContent>

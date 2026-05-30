@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/contexts/AuthContext'
+import { apiClient } from '@/lib/api-client'
 import { motion } from 'framer-motion'
 import {
   ArrowLeft,
@@ -32,20 +33,39 @@ import {
   Circle,
   Users,
 } from 'lucide-react'
-import {
-  mockFriends,
-  mockIncomingRequests,
-  mockOutgoingRequests,
-  mockSearchUsers,
-  type Friend,
-  type FriendRequest,
-  type SearchUser,
-} from '@/lib/friendsMock'
+
+interface Friend {
+  id: string
+  username: string
+  displayName: string | null
+  avatarUrl: string | null
+  isOnline: boolean
+  lastSeen: string | null
+}
+
+interface FriendRequest {
+  id: string
+  fromUserId?: string
+  toUserId?: string
+  username: string
+  displayName: string | null
+  avatarUrl: string | null
+  createdAt: string
+}
+
+interface SearchUser {
+  id: string
+  username: string
+  displayName: string | null
+  avatarUrl: string | null
+  isFriend: boolean
+  friendshipStatus: string | null
+}
 
 export default function FriendsPage() {
   const { user } = useAuth()
   const { toast } = useToast()
-  
+
   const [friends, setFriends] = useState<Friend[]>([])
   const [filteredFriends, setFilteredFriends] = useState<Friend[]>([])
   const [friendSearchQuery, setFriendSearchQuery] = useState('')
@@ -55,13 +75,13 @@ export default function FriendsPage() {
   const [searchResults, setSearchResults] = useState<SearchUser[]>([])
   const [isSearching, setIsSearching] = useState(false)
 
-  // Fetch friends on mount
   useEffect(() => {
-    fetchFriends()
-    fetchRequests()
-  }, [])
+    if (user) {
+      fetchFriends()
+      fetchRequests()
+    }
+  }, [user])
 
-  // Filter friends based on search query
   useEffect(() => {
     if (!friendSearchQuery.trim()) {
       setFilteredFriends(friends)
@@ -70,145 +90,142 @@ export default function FriendsPage() {
       setFilteredFriends(
         friends.filter(
           (friend) =>
-            friend.displayName.toLowerCase().includes(query) ||
+            (friend.displayName || friend.username).toLowerCase().includes(query) ||
             friend.username.toLowerCase().includes(query)
         )
       )
     }
   }, [friendSearchQuery, friends])
 
-  // TODO: Connect to Supabase later
   const fetchFriends = async () => {
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 300))
-    setFriends(mockFriends)
+    const res = await apiClient.get<{ friends: Friend[] }>('/friends?status=accepted')
+    if (res.success && res.data) {
+      setFriends(res.data.friends)
+    }
   }
 
-  // TODO: Connect to Supabase later
   const fetchRequests = async () => {
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 300))
-    setIncomingRequests(mockIncomingRequests)
-    setOutgoingRequests(mockOutgoingRequests)
+    const res = await apiClient.get<{ incoming: FriendRequest[]; outgoing: FriendRequest[] }>('/friends/requests')
+    if (res.success && res.data) {
+      setIncomingRequests(res.data.incoming)
+      setOutgoingRequests(res.data.outgoing)
+    }
   }
 
-  // TODO: Connect to Supabase later
   const searchUsers = async (query: string) => {
-    if (!query.trim()) {
+    if (!query.trim() || query.length < 2) {
       setSearchResults([])
       return
     }
 
     setIsSearching(true)
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 500))
-    
-    const filtered = mockSearchUsers.filter(
-      (u) =>
-        u.username.toLowerCase().includes(query.toLowerCase()) ||
-        u.displayName.toLowerCase().includes(query.toLowerCase()) ||
-        u.email.toLowerCase().includes(query.toLowerCase())
-    )
-    setSearchResults(filtered)
+    const res = await apiClient.get<{ users: SearchUser[] }>(`/profiles/search?query=${encodeURIComponent(query)}`)
+    if (res.success && res.data) {
+      setSearchResults(res.data.users)
+    } else {
+      setSearchResults([])
+    }
     setIsSearching(false)
   }
 
-  // TODO: Connect to Supabase later
   const sendFriendRequest = async (userId: string) => {
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 300))
-    
-    toast({
-      title: 'Friend request sent!',
-      description: 'Your friend request has been sent successfully.',
-    })
-    
-    // Refresh search results to remove the user
-    setSearchResults((prev) => prev.filter((u) => u.id !== userId))
+    const res = await apiClient.post('/friends/requests', { friendId: userId })
+    if (res.success) {
+      toast({
+        title: 'Friend request sent!',
+        description: 'Your friend request has been sent successfully.',
+      })
+      setSearchResults((prev) => prev.filter((u) => u.id !== userId))
+    } else {
+      toast({
+        title: 'Failed to send request',
+        description: res.error || 'Something went wrong.',
+        variant: 'destructive',
+      })
+    }
   }
 
-  // TODO: Connect to Supabase later
   const acceptFriendRequest = async (requestId: string) => {
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 300))
-    
-    const request = incomingRequests.find((r) => r.id === requestId)
-    if (request) {
-      // Add to friends list
-      const newFriend: Friend = {
-        id: request.fromUserId,
-        username: request.username,
-        displayName: request.displayName,
-        email: request.email,
-        avatarUrl: request.avatarUrl,
-        isOnline: false,
-      }
-      setFriends((prev) => [...prev, newFriend])
-      
-      // Remove from incoming requests
+    const res = await apiClient.post(`/friends/requests/${requestId}/accept`)
+    if (res.success) {
+      const request = incomingRequests.find((r) => r.id === requestId)
       setIncomingRequests((prev) => prev.filter((r) => r.id !== requestId))
-      
+      await fetchFriends()
       toast({
         title: 'Friend request accepted!',
-        description: `You are now friends with ${request.displayName}.`,
+        description: request ? `You are now friends with ${request.displayName || request.username}.` : 'Friend added.',
+      })
+    } else {
+      toast({
+        title: 'Failed to accept request',
+        description: res.error || 'Something went wrong.',
+        variant: 'destructive',
       })
     }
   }
 
-  // TODO: Connect to Supabase later
   const declineFriendRequest = async (requestId: string) => {
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 300))
-    
     const request = incomingRequests.find((r) => r.id === requestId)
-    setIncomingRequests((prev) => prev.filter((r) => r.id !== requestId))
-    
-    if (request) {
+    const res = await apiClient.post(`/friends/requests/${requestId}/decline`)
+    if (res.success) {
+      setIncomingRequests((prev) => prev.filter((r) => r.id !== requestId))
+      if (request) {
+        toast({
+          title: 'Friend request declined',
+          description: `You declined ${request.displayName || request.username}'s friend request.`,
+        })
+      }
+    } else {
       toast({
-        title: 'Friend request declined',
-        description: `You declined ${request.displayName}'s friend request.`,
-        variant: 'default',
+        title: 'Failed to decline request',
+        description: res.error || 'Something went wrong.',
+        variant: 'destructive',
       })
     }
   }
 
-  // TODO: Connect to Supabase later
   const cancelFriendRequest = async (requestId: string) => {
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 300))
-    
     const request = outgoingRequests.find((r) => r.id === requestId)
-    setOutgoingRequests((prev) => prev.filter((r) => r.id !== requestId))
-    
-    if (request) {
+    const res = await apiClient.post(`/friends/requests/${requestId}/decline`)
+    if (res.success) {
+      setOutgoingRequests((prev) => prev.filter((r) => r.id !== requestId))
+      if (request) {
+        toast({
+          title: 'Friend request cancelled',
+          description: `You cancelled the friend request to ${request.displayName || request.username}.`,
+        })
+      }
+    } else {
       toast({
-        title: 'Friend request cancelled',
-        description: `You cancelled the friend request to ${request.displayName}.`,
+        title: 'Failed to cancel request',
+        description: res.error || 'Something went wrong.',
+        variant: 'destructive',
       })
     }
   }
 
-  // TODO: Connect to Supabase later
   const removeFriend = async (friendId: string) => {
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 300))
-    
     const friend = friends.find((f) => f.id === friendId)
-    setFriends((prev) => prev.filter((f) => f.id !== friendId))
-    
-    if (friend) {
+    const res = await apiClient.delete(`/friends/${friendId}`)
+    if (res.success) {
+      setFriends((prev) => prev.filter((f) => f.id !== friendId))
+      if (friend) {
+        toast({
+          title: 'Friend removed',
+          description: `You removed ${friend.displayName || friend.username} from your friends list.`,
+        })
+      }
+    } else {
       toast({
-        title: 'Friend removed',
-        description: `You removed ${friend.displayName} from your friends list.`,
-        variant: 'default',
+        title: 'Failed to remove friend',
+        description: res.error || 'Something went wrong.',
+        variant: 'destructive',
       })
     }
   }
 
-  // Get online friends
   const onlineFriends = friends.filter((friend) => friend.isOnline)
 
-  // Get user initials for avatar
   const getUserInitials = (name: string) => {
     return name
       .split(' ')
@@ -241,7 +258,6 @@ export default function FriendsPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <div className="container mx-auto px-4 py-8 max-w-6xl">
-        {/* Back Button */}
         <Link
           href="/"
           className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900 mb-6 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-sm"
@@ -251,7 +267,6 @@ export default function FriendsPage() {
           Back to Home
         </Link>
 
-        {/* Page Header */}
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">Friends</h1>
           <p className="text-gray-600">
@@ -260,9 +275,8 @@ export default function FriendsPage() {
         </div>
 
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* Main Content - Left Side (2 columns) */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Friends List Section */}
+            {/* Friends List */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -274,7 +288,6 @@ export default function FriendsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Search Bar */}
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -286,7 +299,6 @@ export default function FriendsPage() {
                   />
                 </div>
 
-                {/* Friends List */}
                 <div className="space-y-3 max-h-[600px] overflow-y-auto">
                   {filteredFriends.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground">
@@ -296,9 +308,7 @@ export default function FriendsPage() {
                         <>
                           <Users className="h-12 w-12 mx-auto mb-4 text-gray-400" />
                           <p>No friends yet</p>
-                          <p className="text-sm mt-2">
-                            Start by searching for users above!
-                          </p>
+                          <p className="text-sm mt-2">Start by searching for users below!</p>
                         </>
                       )}
                     </div>
@@ -316,12 +326,9 @@ export default function FriendsPage() {
                               <div className="flex items-center gap-4 flex-1">
                                 <div className="relative">
                                   <Avatar className="h-12 w-12">
-                                    <AvatarImage
-                                      src={friend.avatarUrl}
-                                      alt={friend.displayName}
-                                    />
+                                    <AvatarImage src={friend.avatarUrl || undefined} alt={friend.displayName || friend.username} />
                                     <AvatarFallback className="bg-primary/10 text-primary">
-                                      {getUserInitials(friend.displayName)}
+                                      {getUserInitials(friend.displayName || friend.username)}
                                     </AvatarFallback>
                                   </Avatar>
                                   {friend.isOnline && (
@@ -330,16 +337,11 @@ export default function FriendsPage() {
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <p className="font-semibold text-sm truncate">
-                                    {friend.displayName}
+                                    {friend.displayName || friend.username}
                                   </p>
                                   <p className="text-sm text-muted-foreground truncate">
                                     @{friend.username}
                                   </p>
-                                  {!friend.isOnline && friend.lastSeen && (
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                      Last seen {friend.lastSeen}
-                                    </p>
-                                  )}
                                 </div>
                                 {friend.isOnline && (
                                   <Badge variant="secondary" className="bg-green-100 text-green-800">
@@ -352,7 +354,7 @@ export default function FriendsPage() {
                                 size="sm"
                                 onClick={() => removeFriend(friend.id)}
                                 className="ml-4 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                aria-label={`Remove ${friend.displayName} from friends`}
+                                aria-label={`Remove ${friend.displayName || friend.username} from friends`}
                               >
                                 <UserMinus className="h-4 w-4" />
                               </Button>
@@ -366,7 +368,7 @@ export default function FriendsPage() {
               </CardContent>
             </Card>
 
-            {/* Friend Requests Section */}
+            {/* Friend Requests */}
             <Card>
               <CardHeader>
                 <CardTitle>Friend Requests</CardTitle>
@@ -385,7 +387,6 @@ export default function FriendsPage() {
                     </TabsTrigger>
                   </TabsList>
 
-                  {/* Incoming Requests */}
                   <TabsContent value="incoming" className="mt-4">
                     <div className="space-y-3">
                       {incomingRequests.length === 0 ? (
@@ -406,17 +407,14 @@ export default function FriendsPage() {
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-4 flex-1">
                                     <Avatar className="h-10 w-10">
-                                      <AvatarImage
-                                        src={request.avatarUrl}
-                                        alt={request.displayName}
-                                      />
+                                      <AvatarImage src={request.avatarUrl || undefined} alt={request.displayName || request.username} />
                                       <AvatarFallback className="bg-primary/10 text-primary">
-                                        {getUserInitials(request.displayName)}
+                                        {getUserInitials(request.displayName || request.username)}
                                       </AvatarFallback>
                                     </Avatar>
                                     <div className="flex-1 min-w-0">
                                       <p className="font-semibold text-sm truncate">
-                                        {request.displayName}
+                                        {request.displayName || request.username}
                                       </p>
                                       <p className="text-sm text-muted-foreground truncate">
                                         @{request.username}
@@ -428,7 +426,7 @@ export default function FriendsPage() {
                                       size="sm"
                                       onClick={() => acceptFriendRequest(request.id)}
                                       className="bg-green-600 hover:bg-green-700"
-                                      aria-label={`Accept friend request from ${request.displayName}`}
+                                      aria-label={`Accept friend request from ${request.displayName || request.username}`}
                                     >
                                       <Check className="h-4 w-4 mr-1" />
                                       Accept
@@ -437,7 +435,7 @@ export default function FriendsPage() {
                                       size="sm"
                                       variant="destructive"
                                       onClick={() => declineFriendRequest(request.id)}
-                                      aria-label={`Decline friend request from ${request.displayName}`}
+                                      aria-label={`Decline friend request from ${request.displayName || request.username}`}
                                     >
                                       <X className="h-4 w-4 mr-1" />
                                       Decline
@@ -452,7 +450,6 @@ export default function FriendsPage() {
                     </div>
                   </TabsContent>
 
-                  {/* Outgoing Requests */}
                   <TabsContent value="outgoing" className="mt-4">
                     <div className="space-y-3">
                       {outgoingRequests.length === 0 ? (
@@ -473,17 +470,14 @@ export default function FriendsPage() {
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-4 flex-1">
                                     <Avatar className="h-10 w-10">
-                                      <AvatarImage
-                                        src={request.avatarUrl}
-                                        alt={request.displayName}
-                                      />
+                                      <AvatarImage src={request.avatarUrl || undefined} alt={request.displayName || request.username} />
                                       <AvatarFallback className="bg-primary/10 text-primary">
-                                        {getUserInitials(request.displayName)}
+                                        {getUserInitials(request.displayName || request.username)}
                                       </AvatarFallback>
                                     </Avatar>
                                     <div className="flex-1 min-w-0">
                                       <p className="font-semibold text-sm truncate">
-                                        {request.displayName}
+                                        {request.displayName || request.username}
                                       </p>
                                       <p className="text-sm text-muted-foreground truncate">
                                         @{request.username}
@@ -495,7 +489,7 @@ export default function FriendsPage() {
                                     variant="outline"
                                     onClick={() => cancelFriendRequest(request.id)}
                                     className="ml-4"
-                                    aria-label={`Cancel friend request to ${request.displayName}`}
+                                    aria-label={`Cancel friend request to ${request.displayName || request.username}`}
                                   >
                                     <X className="h-4 w-4 mr-1" />
                                     Cancel
@@ -512,7 +506,7 @@ export default function FriendsPage() {
               </CardContent>
             </Card>
 
-            {/* Add Friends Section */}
+            {/* Add Friends */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -520,34 +514,31 @@ export default function FriendsPage() {
                   Add Friends
                 </CardTitle>
                 <CardDescription>
-                  Search for users by username or email to send friend requests
+                  Search for users by username to send friend requests
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search by username or email..."
-                      value={searchQuery}
-                      onChange={(e) => {
-                        setSearchQuery(e.target.value)
-                        searchUsers(e.target.value)
-                      }}
-                      className="pl-9"
-                      aria-label="Search for users"
-                    />
-                  </div>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search by username..."
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value)
+                      searchUsers(e.target.value)
+                    }}
+                    className="pl-9"
+                    aria-label="Search for users"
+                  />
                 </div>
 
-                {/* Search Results */}
                 {isSearching && (
                   <div className="text-center py-8 text-muted-foreground">
                     <p>Searching...</p>
                   </div>
                 )}
 
-                {!isSearching && searchQuery && searchResults.length === 0 && (
+                {!isSearching && searchQuery.length >= 2 && searchResults.length === 0 && (
                   <div className="text-center py-8 text-muted-foreground">
                     <p>No users found</p>
                   </div>
@@ -555,9 +546,9 @@ export default function FriendsPage() {
 
                 {!isSearching && searchResults.length > 0 && (
                   <div className="space-y-3">
-                    {searchResults.map((user) => (
+                    {searchResults.map((result) => (
                       <motion.div
-                        key={user.id}
+                        key={result.id}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.2 }}
@@ -567,32 +558,35 @@ export default function FriendsPage() {
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-4 flex-1">
                                 <Avatar className="h-10 w-10">
-                                  <AvatarImage
-                                    src={user.avatarUrl}
-                                    alt={user.displayName}
-                                  />
+                                  <AvatarImage src={result.avatarUrl || undefined} alt={result.displayName || result.username} />
                                   <AvatarFallback className="bg-primary/10 text-primary">
-                                    {getUserInitials(user.displayName)}
+                                    {getUserInitials(result.displayName || result.username)}
                                   </AvatarFallback>
                                 </Avatar>
                                 <div className="flex-1 min-w-0">
                                   <p className="font-semibold text-sm truncate">
-                                    {user.displayName}
+                                    {result.displayName || result.username}
                                   </p>
                                   <p className="text-sm text-muted-foreground truncate">
-                                    @{user.username}
+                                    @{result.username}
                                   </p>
                                 </div>
                               </div>
-                              <Button
-                                size="sm"
-                                onClick={() => sendFriendRequest(user.id)}
-                                className="ml-4"
-                                aria-label={`Send friend request to ${user.displayName}`}
-                              >
-                                <UserPlus className="h-4 w-4 mr-1" />
-                                Send Request
-                              </Button>
+                              {result.isFriend ? (
+                                <Badge variant="secondary" className="ml-4">Already friends</Badge>
+                              ) : result.friendshipStatus === 'pending' ? (
+                                <Badge variant="outline" className="ml-4">Request sent</Badge>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  onClick={() => sendFriendRequest(result.id)}
+                                  className="ml-4"
+                                  aria-label={`Send friend request to ${result.displayName || result.username}`}
+                                >
+                                  <UserPlus className="h-4 w-4 mr-1" />
+                                  Send Request
+                                </Button>
+                              )}
                             </div>
                           </CardContent>
                         </Card>
@@ -604,14 +598,14 @@ export default function FriendsPage() {
                 {!searchQuery && (
                   <div className="text-center py-8 text-muted-foreground">
                     <Search className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                    <p>Enter a username or email to search for users</p>
+                    <p>Enter a username to search for users</p>
                   </div>
                 )}
               </CardContent>
             </Card>
           </div>
 
-          {/* Right Sidebar - Online Now */}
+          {/* Online Now Sidebar */}
           <div className="lg:col-span-1">
             <Card className="sticky top-24">
               <CardHeader>
@@ -640,19 +634,16 @@ export default function FriendsPage() {
                         <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors">
                           <div className="relative">
                             <Avatar className="h-10 w-10">
-                              <AvatarImage
-                                src={friend.avatarUrl}
-                                alt={friend.displayName}
-                              />
+                              <AvatarImage src={friend.avatarUrl || undefined} alt={friend.displayName || friend.username} />
                               <AvatarFallback className="bg-green-100 text-green-800">
-                                {getUserInitials(friend.displayName)}
+                                {getUserInitials(friend.displayName || friend.username)}
                               </AvatarFallback>
                             </Avatar>
                             <Circle className="absolute bottom-0 right-0 h-3 w-3 fill-green-500 text-green-500 border-2 border-background rounded-full" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-sm truncate">
-                              {friend.displayName}
+                              {friend.displayName || friend.username}
                             </p>
                             <p className="text-xs text-muted-foreground truncate">
                               @{friend.username}
@@ -671,4 +662,3 @@ export default function FriendsPage() {
     </div>
   )
 }
-

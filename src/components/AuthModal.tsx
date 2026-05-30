@@ -19,6 +19,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [checkEmail, setCheckEmail] = useState(false)
 
   const { signIn, signUp, signInWithGoogle } = useAuth()
 
@@ -29,11 +30,16 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
     try {
       if (isSignUp) {
-        await signUp(email, password)
+        const { data } = await signUp(email, password)
+        if (data?.session) {
+          onClose()
+        } else {
+          setCheckEmail(true)
+        }
       } else {
         await signIn(email, password)
+        onClose()
       }
-      onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
@@ -55,9 +61,27 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
   if (!isOpen) return null
 
+  if (checkEmail) {
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto py-4">
+        <Card className="w-full max-w-md mx-4 my-auto">
+          <CardHeader>
+            <CardTitle>Check your email</CardTitle>
+            <CardDescription>
+              We sent a confirmation link to <strong>{email}</strong>. Click it to activate your account, then sign in.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button className="w-full" onClick={onClose}>Got it</Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <Card className="w-full max-w-md mx-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto py-4">
+      <Card className="w-full max-w-md mx-4 my-auto">
         <CardHeader className="relative">
           <Button
             variant="ghost"
@@ -158,7 +182,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
               </>
             ) : (
               <>
-                Don't have an account?{' '}
+                Don&apos;t have an account?{' '}
                 <button
                   type="button"
                   className="text-primary hover:underline"
